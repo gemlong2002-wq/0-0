@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THEO LIU // PURE WHITE LAB v3.5.2 (OPTICAL MATRIX)</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700;900&display=swap');
+    body { font-family: 'JetBrains Mono', monospace; background-color: #f8fafc; color: #0f172a; overflow-x: hidden; scroll-behavior: smooth; }
+    
+    /* 🧪 White Matrix Canvas - Opacity increased to 0.25 for High Clarity */
+    #matrix_bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.25; pointer-events: none; }
+
+    /* 🧪 V15 Scale Card Physics */
+    .scale-card { 
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+      background: rgba(255, 255, 255, 0.85); 
+      backdrop-filter: blur(16px); 
+      border: 1px solid #e2e8f0; 
+      border-radius: 16px;
+    }
+    .scale-card:hover, .scale-card:focus-within { 
+      transform: translateY(-8px); 
+      box-shadow: 0 25px 50px -12px rgba(14, 165, 233, 0.15), 0 10px 15px -3px rgba(14, 165, 233, 0.05); 
+      border-color: #bae6fd; 
+      z-index: 10;
+    }
+
+    @keyframes terminal-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    .animate-blink { animation: terminal-blink 1s step-end infinite; }
+
+    @keyframes glitch-anim {
+      0% { transform: translate(0) }
+      20% { transform: translate(-5px, 5px) }
+      40% { transform: translate(-5px, -5px) }
+      60% { transform: translate(5px, 5px) }
+      80% { transform: translate(5px, -5px) }
+      100% { transform: translate(0) }
+    }
+    .glitch-mode { 
+      animation: glitch-anim 0.2s cubic-bezier(.25, .46, .45, .94) both infinite; 
+      filter: saturate(200%) hue-rotate(330deg);
+      pointer-events: none;
+    }
+
+    @keyframes heartbeat-slide { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+    .ekg-stable { animation: heartbeat-slide 2.5s linear infinite; }
+    .ekg-syncing { animation: heartbeat-slide 0.3s linear infinite; }
+
+    .ghost-input { color: transparent; text-shadow: 0 0 0 transparent; outline: none; caret-color: transparent; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: #f8fafc; }
+  </style>
+
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: { 500: '#0ea5e9', 600: '#0284c7' } } } }
+    }
+  </script>
+</head>
+<body class="antialiased min-h-screen">
+
+  <canvas id="matrix_bg"></canvas>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxU-FmeUetTKQL13nhnMexKwEGm4l0kBOvW6YY4FerX_yRGTOOBqg-s162SupYi1a7StQ/exec";
+    
+    const gasAPI = {
+      call: async (funcName, ...args) => {
+        if (typeof google !== 'undefined' && google.script) {
+          return new Promise((resolve, reject) => {
+            google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[funcName](...args);
+          });
+        } else {
+          const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ funcName, args }), redirect: 'follow' });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          return data.result;
+        }
+      }
+    };
+
+    const IconProps = { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" };
+    const Plus = ({ className }) => <svg {...IconProps} className={className}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+    const Pencil = ({ className }) => <svg {...IconProps} className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>;
+    const Trash2 = ({ className }) => <svg {...IconProps} className={className}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+    const Search = ({ className }) => <svg {...IconProps} className={className}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>;
+    const Loader = ({ className }) => <svg {...IconProps} className={className}><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="4.93" x2="19.07" y2="7.76"></line></svg>;
+    const Terminal = ({ className }) => <svg {...IconProps} className={className}><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>;
+    const ExternalLink = ({ className }) => <svg {...IconProps} className={className}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>;
+    const ChevronDown = ({ className }) => <svg {...IconProps} className={className}><polyline points="6 9 12 15 18 9"></polyline></svg>;
+    const Box = ({ className }) => <svg {...IconProps} className={className}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>;
+    const Lock = ({ className }) => <svg {...IconProps} className={className}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
+    const Activity = ({ className }) => <svg {...IconProps} className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>;
+
+    const categoryConfig = {
+      '資產': { color: 'text-cyan-600', border: 'border-cyan-600/20', bgFill: 'bg-cyan-500', badge: 'bg-cyan-50', badgeBorder: 'border-cyan-200' },
+      '旅遊': { color: 'text-fuchsia-600', border: 'border-fuchsia-600/20', bgFill: 'bg-fuchsia-500', badge: 'bg-fuchsia-50', badgeBorder: 'border-fuchsia-200' },
+      '工作': { color: 'text-blue-600', border: 'border-blue-600/20', bgFill: 'bg-blue-500', badge: 'bg-blue-50', badgeBorder: 'border-blue-200' },
+      '其他': { color: 'text-slate-600', border: 'border-slate-600/20', bgFill: 'bg-slate-500', badge: 'bg-slate-50', badgeBorder: 'border-slate-200' }
+    };
+
+    const PIN_LENGTH = 4;
+
+    const HighlightText = ({ text = '', search = '' }) => {
+      if (!search) return <>{text}</>;
+      const parts = text.split(new RegExp(`(${search})`, 'gi'));
+      return (
+        <>
+          {parts.map((part, i) =>
+            part.toLowerCase() === search.toLowerCase() ? (
+              <span key={i} className="bg-brand-500 text-white font-black px-1 rounded-sm shadow-sm">{part}</span>
+            ) : (
+              <span key={i}>{part}</span>
+            )
+          )}
+        </>
+      );
+    };
+
+    function HubApp() {
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [pin, setPin] = useState('');
+      const [pinStatus, setPinStatus] = useState('idle'); 
+      const pinInputRef = useRef(null);
+      const searchInputRef = useRef(null);
+
+      const [items, setItems] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [syncStatus, setSyncStatus] = useState('STABLE');
+      const [isGlitching, setIsGlitching] = useState(false);
+      
+      const [searchTerm, setSearchTerm] = useState('');
+      const [editingItem, setEditingItem] = useState(null);
+      const [modalOpen, setModalOpen] = useState(false);
+      const [collapsedCategories, setCollapsedCategories] = useState({});
+
+      // 🎹 Keyboard Nav
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (e.ctrlKey && e.key === 'k') { e.preventDefault(); if (searchInputRef.current) searchInputRef.current.focus(); }
+          if (e.key === 'Escape') {
+            setModalOpen(false); setEditingItem(null);
+            if (document.activeElement === searchInputRef.current) { setSearchTerm(''); searchInputRef.current.blur(); }
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, []);
+
+      // 🧪 High-Clarity White Matrix Effect
+      useEffect(() => {
+        const canvas = document.getElementById('matrix_bg');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const alphabet = "THEOLIU01ABC//🔒SYS_CORE";
+        const fontSize = 18; // Slightly larger for clarity
+        const columns = canvas.width / fontSize;
+        const rainDrops = Array(Math.floor(columns)).fill(1);
+        
+        const draw = () => { 
+          // Trail fade optimized to clear frame faster (0.25 alpha)
+          ctx.fillStyle = 'rgba(248, 250, 252, 0.25)';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
+          // Pure Brand Blue + Extreme Bold Font
+          ctx.fillStyle = '#0ea5e9';
+          ctx.font = '900 ' + fontSize + 'px "JetBrains Mono", monospace';
+          
+          for(let i = 0; i < rainDrops.length; i++){
+            const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+            ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+            if(rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) { rainDrops[i] = 0; }
+            rainDrops[i]++;
+          }
+        };
+        const interval = setInterval(draw, 35);
+        const handleResize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+        window.addEventListener('resize', handleResize);
+        return () => { clearInterval(interval); window.removeEventListener('resize', handleResize); }
+      }, []);
+
+      const handleInputChange = (e) => {
+        if (pinStatus === 'error') { setPin(''); setPinStatus('idle'); return; }
+        const val = e.target.value.replace(/[^0-9]/g, '').slice(0, PIN_LENGTH);
+        setPin(val);
+
+        if (val.length === PIN_LENGTH) {
+          setPinStatus('checking');
+          gasAPI.call('getHubItems', val)
+            .then(data => { setItems(Array.isArray(data) ? data : []); setLoading(false); setTimeout(() => { setIsAuthenticated(true); }, 300); })
+            .catch(err => { setTimeout(() => { setPinStatus('error'); }, 400); });
+        }
+      };
+
+      const focusInput = () => {
+        if (pinInputRef.current) { if (pinStatus === 'error') { setPin(''); setPinStatus('idle'); } pinInputRef.current.focus(); }
+      };
+
+      const triggerGlitchRollback = (previousItems, errorMsg) => {
+        setIsGlitching(true); setSyncStatus('ERROR_ROLLBACK'); setItems(previousItems); 
+        setTimeout(() => { setIsGlitching(false); setSyncStatus('STABLE'); }, 1500);
+        console.error("VIBE_CRITICAL: ", errorMsg);
+      };
+
+      const scrollToSector = (sectorId) => {
+        const el = document.getElementById(sectorId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const handleDelete = (id) => {
+        if (!window.confirm('SYS_PROMPT: PERMANENT DELETE?')) return;
+        const previousItems = [...items]; 
+        setItems(prev => prev.filter(i => i.id !== id)); 
+        setSyncStatus('SYNCING');
+        gasAPI.call('deleteHubItem', pin, id)
+          .then(success => { if(success) setSyncStatus('STABLE'); else triggerGlitchRollback(previousItems, "Record missing in DB."); })
+          .catch(err => triggerGlitchRollback(previousItems, err.message));
+      };
+
+      const handleFormSubmit = (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const itemData = Object.fromEntries(formData.entries());
+        const previousItems = [...items]; 
+
+        if (editingItem) { itemData.id = editingItem.id; setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, ...itemData } : i)); } 
+        else { itemData.id = 'temp_' + Date.now().toString(); setItems(prev => [...prev, itemData]); }
+        
+        setModalOpen(false); setEditingItem(null); setSyncStatus('SYNCING');
+
+        gasAPI.call('saveHubItem', pin, itemData)
+          .then(success => { if(success) setSyncStatus('STABLE'); else triggerGlitchRollback(previousItems, "Failed to write DB."); })
+          .catch(err => triggerGlitchRollback(previousItems, err.message));
+      };
+
+      const toggleCategory = (categoryName) => { setCollapsedCategories(prev => ({ ...prev, [categoryName]: !prev[categoryName] })); };
+      const filteredItems = items.filter(i => (i.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (i.category || '').toLowerCase().includes(searchTerm.toLowerCase()));
+      const groupedItems = filteredItems.reduce((acc, item) => { let cat = item.category || '其他'; if (!categoryConfig[cat]) cat = '其他'; if (!acc[cat]) acc[cat] = []; acc[cat].push(item); return acc; }, {});
+      const sortedCategories = Object.keys(categoryConfig).filter(key => groupedItems[key]);
+
+      const isSyncing = syncStatus === 'SYNCING';
+      const isError = syncStatus === 'ERROR_ROLLBACK';
+      const coreColor = isError ? 'text-rose-600 border-rose-200' : isSyncing ? 'text-amber-600 border-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.1)_inset]' : 'text-emerald-600 border-emerald-200';
+      const coreBg = isError ? 'bg-rose-50' : isSyncing ? 'bg-amber-50' : 'bg-emerald-50';
+      const coreLabel = isError ? 'SYS_FAIL' : isSyncing ? 'RECALCULATING' : 'SECURE';
+
+      if (!isAuthenticated) {
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 relative" onClick={focusInput}>
+            <div className="absolute inset-0 bg-slate-50/70 backdrop-blur-lg"></div>
+            <div className="relative z-10 w-full max-w-md space-y-12 text-center">
+              <div className="space-y-4 flex flex-col items-center">
+                <Lock className={`w-16 h-16 mb-4 ${pinStatus === 'error' ? 'text-rose-500 animate-pulse' : 'text-brand-500'}`} />
+                <h1 className="text-5xl md:text-7xl font-black text-slate-900 uppercase tracking-tighter drop-shadow-md">
+                  THEO LIU<br/><span className="text-brand-500 text-3xl">LAB_CORE v3.5.2</span>
+                </h1>
+                <div className="h-1 w-16 bg-brand-500"></div>
+                <p className={`text-lg font-mono tracking-widest ${pinStatus === 'error' ? 'text-rose-500' : 'text-slate-600'} animate-pulse mt-4 font-bold`}>
+                  {pinStatus === 'error' ? 'MISMATCH // ACCESS_DENIED' : 'TAP SCREEN TO INPUT PIN'}
+                </p>
+              </div>
+
+              <div className="relative mx-auto w-full max-w-sm cursor-text" onClick={focusInput}>
+                <input ref={pinInputRef} type="text" inputMode="numeric" pattern="[0-9]*" maxLength={PIN_LENGTH} value={pin} onChange={handleInputChange} className="absolute inset-0 w-full h-full opacity-0 ghost-input z-20" autoFocus />
+                <div className={`scale-card p-8 flex justify-center items-center gap-4 transition-colors relative z-10 ${pinStatus === 'error' ? 'border-2 border-rose-400 shadow-lg' : ''}`}>
+                  {Array(PIN_LENGTH).fill(0).map((_, i) => {
+                    const isCurrent = pin.length === i && pinStatus === 'idle';
+                    return (
+                      <div key={i} className={`w-12 h-16 md:w-16 md:h-20 bg-white border-b-4 rounded-t-md shadow-sm ${ pinStatus === 'error' ? 'border-rose-500 text-rose-500' : (pin.length > i ? 'border-brand-500' : (isCurrent ? 'border-brand-500 shadow-[0_4px_10px_rgba(14,165,233,0.2)]' : 'border-slate-200')) } flex items-center justify-center text-5xl md:text-6xl font-light text-slate-900 font-mono transition-all`}>
+                        {pinStatus === 'checking' ? <Loader className="w-8 h-8 animate-spin text-brand-400"/> : (pin.length > i ? (pinStatus === 'error' ? 'X' : '•') : (isCurrent ? <span className="animate-blink text-brand-500 opacity-80">_</span> : ''))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className={`transition-all duration-75 ${isGlitching ? 'glitch-mode' : ''}`}>
+          <div className="max-w-[1600px] mx-auto p-6 md:p-16 relative z-10 flex flex-col min-h-screen">
+            
+            <div className="flex flex-col xl:flex-row justify-between items-start mb-16 gap-10">
+              <div className="space-y-6 w-full xl:w-auto">
+                <div className="flex items-center gap-3 text-brand-500 font-bold tracking-[0.25em] text-lg uppercase bg-white/70 w-max px-4 py-1.5 rounded-lg backdrop-blur-md shadow-sm">
+                  <Terminal className="w-6 h-6" /> Lab Interface // Cipher_Key: <span className="text-emerald-500">Accepted</span>
+                </div>
+                <h1 className="text-6xl md:text-8xl lg:text-9xl font-black text-slate-900 tracking-tighter uppercase drop-shadow-sm">
+                  THEO<span className="text-brand-500">.</span>LIU
+                </h1>
+                
+                <div className="flex flex-wrap gap-4 pt-4 border-t border-slate-200/50 w-full max-w-3xl">
+                  <div onClick={() => scrollToSector('root')} className="scale-card px-6 py-4 flex flex-col min-w-[150px] cursor-pointer">
+                    <span className="text-slate-500 text-sm font-bold tracking-widest uppercase">Total_Assets</span>
+                    <span className="text-4xl font-black text-slate-900">{items.length}</span>
+                  </div>
+                  {Object.keys(categoryConfig).map(cat => {
+                    const count = items.filter(i => i.category === cat).length;
+                    const config = categoryConfig[cat];
+                    const percent = items.length ? Math.round((count / items.length) * 100) : 0;
+                    return (
+                      <div key={cat} onClick={() => scrollToSector(`sector-${cat}`)} className={`scale-card px-6 py-4 flex flex-col min-w-[120px] cursor-pointer ${count > 0 ? 'border-b-4 ' + config.border.replace('/20','') : ''}`}>
+                        <span className="text-slate-500 text-sm font-bold tracking-widest uppercase">{cat}</span>
+                        <span className={`text-3xl font-black ${count > 0 ? config.color : 'text-slate-400'}`}>{count}</span>
+                        <div className="w-full h-1.5 bg-slate-200 mt-2 rounded-full overflow-hidden">
+                          <div className={`h-full ${config.bgFill} transition-all duration-500`} style={{ width: `${percent}%` }}></div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  
+                  <div className={`scale-card border-2 ${coreColor} px-6 py-4 flex flex-col min-w-[220px] flex-grow relative overflow-hidden transition-all duration-300`}>
+                    <div className={`absolute inset-0 ${coreBg} transition-colors duration-300 opacity-50`}></div>
+                    <div className="absolute inset-0 flex items-end opacity-20 pointer-events-none overflow-hidden mix-blend-multiply">
+                      <svg className="w-[200%] h-full" viewBox="0 0 200 40" preserveAspectRatio="none">
+                        {isSyncing ? (
+                          <polyline points="0,30 5,30 10,10 15,35 20,5 25,35 30,20 35,30 45,30 50,10 55,35 60,5 65,35 70,20 75,30 85,30 90,10 95,35 100,5 105,35 110,20 115,30 125,30 130,10 135,35 140,5 145,35 150,20 155,30 165,30 170,10 175,35 180,5 185,35 190,20 195,30 200,30" fill="none" stroke="currentColor" strokeWidth="1.5" className="ekg-syncing" />
+                        ) : isError ? (
+                          <polyline points="0,30 200,30" fill="none" stroke="currentColor" strokeWidth="2" className="animate-pulse" />
+                        ) : (
+                          <polyline points="0,30 20,30 25,20 30,38 35,10 40,30 100,30 120,30 125,20 130,38 135,10 140,30 200,30" fill="none" stroke="currentColor" strokeWidth="1" className="ekg-stable" />
+                        )}
+                      </svg>
+                    </div>
+                    <span className={`text-sm font-bold tracking-widest uppercase flex items-center gap-2 relative z-10 ${coreColor.split(' ')[0]}`}>
+                      <Activity className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`}/> CORE_REACTOR
+                    </span>
+                    <span className={`text-3xl font-black relative z-10 ${coreColor.split(' ')[0]}`}>{coreLabel}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-end gap-6 w-full xl:w-auto xl:mt-8">
+                 <div className="flex items-center gap-5 w-full xl:justify-end group">
+                    <div className="relative flex-1 xl:w-[400px] scale-card rounded-xl overflow-hidden focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 transition-all bg-white/95 shadow-sm">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-7 h-7 text-brand-500" />
+                      <input 
+                        ref={searchInputRef} type="text" placeholder="Search (Ctrl+K)" value={searchTerm}
+                        className="w-full bg-transparent outline-none pl-14 pr-12 py-5 text-xl text-slate-900 font-bold placeholder-slate-400"
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                      {searchTerm && (
+                        <button onClick={() => setSearchTerm('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-900 font-mono text-sm bg-slate-100 rounded px-2 py-1 transition-colors">ESC</button>
+                      )}
+                    </div>
+                    <button onClick={() => { setEditingItem(null); setModalOpen(true); }} className="scale-card bg-slate-900 text-white p-5 flex-shrink-0 border-none hover:bg-brand-500 transition-colors rounded-xl shadow-lg">
+                      <Plus className="w-8 h-8 font-black" />
+                    </button>
+                 </div>
+                 
+                 <div className="text-sm font-mono uppercase tracking-widest flex items-center gap-3 bg-white/90 backdrop-blur-md px-5 py-2 border border-slate-200 rounded-full shadow-sm">
+                    {syncStatus === 'SYNCING' && <><div className="w-3 h-3 rounded-full bg-amber-400 animate-ping"></div><span className="text-amber-600 font-bold">SYNCING...</span></>}
+                    {syncStatus === 'STABLE' && <><div className="w-3 h-3 rounded-full bg-brand-500 shadow-[0_0_8px_#0ea5e9]"></div><span className="text-slate-600 font-bold">ONLINE</span></>}
+                    {syncStatus === 'ERROR_ROLLBACK' && <><div className="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></div><span className="text-rose-600 font-bold">ROLLBACK</span></>}
+                 </div>
+              </div>
+            </div>
+
+            {loading && items.length === 0 ? (
+              <div className="h-64 flex flex-col items-center justify-center scale-card">
+                <Loader className="w-16 h-16 animate-spin text-brand-500 mb-6" />
+                <div className="text-2xl text-slate-500 tracking-[0.4em] uppercase font-bold">Fetching_Sectors...</div>
+              </div>
+            ) : sortedCategories.length === 0 ? (
+              <div className="text-center py-32 text-slate-500 text-3xl border-4 border-dashed border-slate-200 bg-white/80 rounded-3xl uppercase font-black tracking-widest shadow-sm">
+                NO_DATA_FOUND // SECTOR_EMPTY
+              </div>
+            ) : (
+              <div className="space-y-20 overflow-y-auto pr-4 pb-20">
+                {sortedCategories.map((category, catIndex) => {
+                  const catItems = groupedItems[category];
+                  const config = categoryConfig[category];
+                  const isCollapsed = collapsedCategories[category];
+
+                  return (
+                    <div id={`sector-${category}`} key={category} className="flex flex-col gap-8 scroll-mt-10">
+                      <div onClick={() => toggleCategory(category)} className={`flex items-center gap-6 cursor-pointer border-b-2 border-slate-300 pb-6 group ${config.color} hover:bg-white/70 backdrop-blur-sm transition-colors p-4 -mx-4 rounded-t-2xl`}>
+                        <ChevronDown className={`w-8 h-8 transition-transform duration-300 text-slate-400 group-hover:${config.color} ${isCollapsed ? '-rotate-90' : ''}`} />
+                        <Box className={`w-8 h-8 ${config.color}`} />
+                        <h2 className="text-4xl md:text-5xl font-black uppercase tracking-widest text-slate-900 drop-shadow-sm">{category}</h2>
+                        <span className={`text-xl font-bold ${config.badge} border ${config.badgeBorder} px-4 py-1 rounded-full ml-4 shadow-sm`}>
+                          {catItems.length}
+                        </span>
+                      </div>
+
+                      {!isCollapsed && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                          {catItems.map((item, itemIndex) => (
+                            <div key={item.id} onClick={() => window.open(item.url, '_blank')} className="scale-card p-8 md:p-10 min-h-[350px] cursor-pointer group flex flex-col relative overflow-hidden bg-white/95">
+                              <div className="flex justify-end mb-8 relative z-20">
+                                <div className="flex gap-2 md:opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                                  <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); setModalOpen(true); }} className="text-slate-400 hover:text-brand-500 bg-slate-50 shadow-sm border border-slate-200 p-3 rounded-full hover:shadow-md transition-all" title="編輯">
+                                    <Pencil className="w-5 h-5"/>
+                                  </button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-slate-400 hover:text-rose-500 bg-slate-50 shadow-sm border border-slate-200 p-3 rounded-full hover:shadow-md transition-all" title="刪除">
+                                    <Trash2 className="w-5 h-5"/>
+                                  </button>
+                                </div>
+                              </div>
+                              <h3 className="text-3xl md:text-4xl font-black text-slate-900 mb-6 transition-transform origin-left group-hover:scale-[1.02] uppercase tracking-tighter line-clamp-2 leading-tight flex items-start gap-4">
+                                <span className={`text-xl mt-1 font-mono px-3 py-1 rounded border flex-shrink-0 ${config.color} ${config.badge} ${config.badgeBorder}`}>
+                                  {catIndex + 1}-{itemIndex + 1}
+                                </span>
+                                <span><HighlightText text={item.name} search={searchTerm} /></span>
+                              </h3>
+                              <p className="text-lg text-slate-600 leading-relaxed mb-10 line-clamp-3 font-light flex-grow">
+                                <HighlightText text={item.description || '// NO_DESCRIPTION'} search={searchTerm} />
+                              </p>
+                              <div className="flex justify-between items-end mt-auto pt-6 border-t border-slate-200 relative z-20">
+                                <div className="inline-flex items-center gap-2 text-sm font-black tracking-widest uppercase text-brand-600 bg-brand-50 border border-brand-100 px-4 py-2 rounded-full group-hover:bg-brand-500 group-hover:text-white group-hover:border-brand-500 transition-colors">
+                                  <ExternalLink className="w-4 h-4" /> Launch
+                                </div>
+                                <span className="text-xs font-mono text-slate-400 truncate max-w-[120px]">ID:{item.id.substring(0,8)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 🧪 V15 Clean Modal */}
+            {modalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
+                <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-md transition-opacity" onClick={() => setModalOpen(false)}></div>
+                <form onSubmit={handleFormSubmit} className="relative w-full max-w-3xl bg-white border border-slate-200 rounded-3xl p-10 md:p-14 space-y-10 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                  <div className="space-y-3 mb-10">
+                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 uppercase tracking-tighter">{editingItem ? 'Edit Entry' : 'New Entry'}</h2>
+                    <div className="h-1.5 w-20 bg-brand-500 rounded-full"></div>
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="space-y-2">
+                      <label className="block text-sm text-slate-500 uppercase tracking-widest font-bold">Entry_Name <span className="text-rose-500">*</span></label>
+                      <input name="name" defaultValue={editingItem?.name} required className="w-full bg-slate-50 border-b-2 border-slate-300 focus:border-brand-500 px-4 py-4 text-2xl outline-none text-slate-900 font-bold transition-colors rounded-t-lg" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm text-slate-500 uppercase tracking-widest font-bold">Target_URL <span className="text-rose-500">*</span></label>
+                      <input name="url" type="url" defaultValue={editingItem?.url} required className="w-full bg-slate-50 border-b-2 border-slate-300 focus:border-brand-500 px-4 py-4 text-xl outline-none text-brand-600 font-bold transition-colors rounded-t-lg" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm text-slate-500 uppercase tracking-widest font-bold">Category_Sector</label>
+                      <select name="category" defaultValue={editingItem?.category && categoryConfig[editingItem.category] ? editingItem.category : '其他'} className="w-full bg-slate-50 border-b-2 border-slate-300 focus:border-brand-500 px-4 py-4 text-xl outline-none text-slate-900 font-bold appearance-none cursor-pointer transition-colors rounded-t-lg">
+                        {Object.keys(categoryConfig).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm text-slate-500 uppercase tracking-widest font-bold">Brief_Description</label>
+                      <textarea name="description" defaultValue={editingItem?.description} className="w-full bg-slate-50 border-b-2 border-slate-300 focus:border-brand-500 px-4 py-4 text-lg outline-none text-slate-700 font-light resize-none transition-colors rounded-t-lg" rows="4"></textarea>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-8 mt-8 border-t border-slate-200">
+                    <button type="button" onClick={() => setModalOpen(false)} className="flex-1 bg-slate-100 text-slate-700 py-5 rounded-xl text-lg font-bold uppercase tracking-widest hover:bg-slate-200 transition-colors">Abort</button>
+                    <button type="submit" className="flex-1 bg-slate-900 text-white py-5 rounded-xl text-lg font-bold uppercase tracking-widest hover:bg-brand-500 shadow-lg shadow-slate-300 hover:shadow-brand-200 transition-all">Commit_Data</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            <footer className="mt-auto pt-24 pb-8 w-full">
+              <div className="border-t-2 border-slate-300 pt-8 flex flex-col md:flex-row justify-between items-end gap-6 opacity-60 hover:opacity-100 transition-opacity">
+                <div className="flex flex-col gap-2 bg-white/80 p-3 rounded-lg backdrop-blur-md shadow-sm">
+                  <div className="text-2xl font-black text-slate-500 tracking-tighter uppercase">SYSTEM_ARCHITECT</div>
+                  <div className="text-sm font-bold bg-slate-900 text-white px-4 py-1.5 rounded inline-block uppercase w-max tracking-widest shadow-sm">
+                    AUTHORIZED BY CHANGSHENG LIU
+                  </div>
+                </div>
+                <div className="flex gap-1 h-8 items-end">
+                  {[...Array(20)].map((_, i) => (
+                    <div key={i} className="bg-slate-400 rounded-t-sm" style={{ width: `${Math.random() * 4 + 2}px`, height: `${Math.random() * 60 + 40}%` }}></div>
+                  ))}
+                </div>
+              </div>
+            </footer>
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<HubApp />);
+  </script>
+</body>
+</html>
